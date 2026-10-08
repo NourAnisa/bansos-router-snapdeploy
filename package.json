@@ -1,0 +1,11 @@
+{
+  "name": "bansos-router-snapdeploy-wa",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "start:wa": "node whatsapp.mjs" },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.21",
+    "pino": "^9.6.0"
+  }
+}
