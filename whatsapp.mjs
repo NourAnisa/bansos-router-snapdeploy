@@ -5,7 +5,8 @@ import fs from 'node:fs/promises';
 const enabled = process.env.WA_ENABLED === 'true';
 if (!enabled) { console.log('[WA] Disabled. Set WA_ENABLED=true after configuring access.'); process.exit(0); }
 const authDir = process.env.WA_AUTH_DIR || '/home/node/.wa_auth';
-const apiURL = (process.env.WA_AI_BASE_URL || 'http://127.0.0.1:17070/v1').replace(/\\/$/, '');
+const baseURL = process.env.WA_AI_BASE_URL || 'http://127.0.0.1:17070/v1';
+const apiURL = baseURL.endsWith('/') ? baseURL.slice(0, -1) : baseURL;
 const apiKey = process.env.WA_AI_API_KEY || '';
 const model = process.env.WA_MODEL || '';
 const localFAQ = new Map([
