@@ -1,3 +1,4 @@
+import { getSession, addMessage, resetSession, cleanResponse } from './nadia-session.mjs';
 import { businessFAQ, systemPrompt } from './nadia-business.mjs';
 import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import pino from 'pino';
@@ -52,7 +53,7 @@ function cleanup(now) {
   globalRequests = globalRequests.filter(t => now - t < 60_000);
   for (const [id, when] of userLast) if (now - when > 60 * 60_000) userLast.delete(id);
 }
-async function answerAI(text) {
+async function answerAI(text, jid) {
   const models = await chooseModels();
   if (!models.length) return 'Terima kasih. Saat ini layanan AI belum tersedia. Mohon tunggu admin.';
   for (let attempt = 0; attempt < Math.min(models.length, 2); attempt++) {
@@ -67,6 +68,7 @@ async function answerAI(text) {
           headers: { 'content-type': 'application/json', ...(apiKey ? { Authorization: 'Bearer ' + apiKey } : {}) },
           body: JSON.stringify({ model: selectedModel, stream: false, max_tokens: 250, messages: [
             { role: 'system', content: process.env.WA_SYSTEM_PROMPT || systemPrompt },
+            ...getSession(jid).history.slice(-6),
             { role: 'user', content: text }
           ] }),
           signal: controller.signal
@@ -74,7 +76,7 @@ async function answerAI(text) {
       } finally { clearTimeout(timer); }
       if (response.ok) {
         const data = await response.json();
-        const answer = String(data.choices?.[0]?.message?.content || '').trim().slice(0, 3500);
+        const answer = cleanResponse(String(data.choices?.[0]?.message?.content || '')).slice(0, 3500);
         if (answer) return answer;
       }
       if (response.status === 429) {
@@ -131,6 +133,25 @@ async function start() {
         const body = (msg.message?.conversation || msg.message?.extendedTextMessage?.text || '').trim();
         if (!body) continue;
         const text = body.slice(0, 1500);
+        if (/^\/(reset|hapus|mulaiulang)$/i.test(text)) {
+          resetSession(jid);
+          await socket.sendMessage(jid, {text:'Riwayat percakapan Nadia sudah direset, kak.'});
+          continue;
+        }
+        if (/^(\/qris|qris|qr code|barcode pembayaran|bayar qris)$/i.test(text) || /(?:minta|kirim|lihat|mau|bayar).*qris/i.test(text)) {
+          const qrURL = process.env.WA_QRIS_IMAGE_URL || 'https://raw.githubusercontent.com/NourAnisa/bansos-router-snapdeploy/main/qris_bit_bean.png';
+          try {
+            await socket.sendMessage(jid, {image:{url:qrURL}, caption:'QRIS Bit & Bean (NMID: ID1025428743757). Setelah membayar, kirim bukti agar admin dapat memverifikasi. Pembayaran tidak diverifikasi otomatis.'});
+          } catch (err) {
+            console.warn('[WA] QRIS image failed:',err.message);
+            await socket.sendMessage(jid,{text:'QRIS Bit & Bean: '+qrURL+'\nSilakan konfirmasi pembayaran kepada admin.'});
+          }
+          continue;
+        }
+        if (/^\/rekening$|\b(rekening|norek|nomor rekening|transfer bank)\b/i.test(text)) {
+          await socket.sendMessage(jid,{text:'Pembayaran transfer bank untuk tiga usaha perlu diverifikasi admin. Hubungi admin sebelum transfer untuk memastikan nomor rekening tujuan yang berlaku.'});
+          continue;
+        }
         const business = businessFAQ(text, jid);
         const faq = business?.reply || localFAQ.get(text.toLowerCase());
         let reply = faq;
@@ -141,10 +162,10 @@ async function start() {
           } else {
             userLast.set(jid, now);
             globalRequests.push(now);
-            reply = await answerAI(text);
+            reply = await answerAI(text, jid);
           }
         }
-        if (reply) await socket.sendMessage(jid, { text: reply });
+        if (reply) { addMessage(jid,'user',text); addMessage(jid,'assistant',reply); await socket.sendMessage(jid, { text: reply }); }
       } catch (err) { console.warn('[WA] Message handler error:', err.message); }
     }
   });
