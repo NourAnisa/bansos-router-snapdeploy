@@ -1,3 +1,4 @@
+import { businessFAQ, systemPrompt } from './nadia-business.mjs';
 import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import fs from 'node:fs/promises';
@@ -41,7 +42,7 @@ async function answerAI(text) {
           method: 'POST',
           headers: { 'content-type': 'application/json', ...(apiKey ? { Authorization: 'Bearer ' + apiKey } : {}) },
           body: JSON.stringify({ model, stream: false, max_tokens: 250, messages: [
-            { role: 'system', content: process.env.WA_SYSTEM_PROMPT || 'Balas sopan dan ringkas dalam bahasa Indonesia sebagai customer service. Jangan mengarang harga atau janji.' },
+            { role: 'system', content: process.env.WA_SYSTEM_PROMPT || systemPrompt },
             { role: 'user', content: text }
           ] }),
           signal: controller.signal
@@ -107,7 +108,8 @@ async function start() {
         const body = (msg.message?.conversation || msg.message?.extendedTextMessage?.text || '').trim();
         if (!body) continue;
         const text = body.slice(0, 1500);
-        const faq = localFAQ.get(text.toLowerCase());
+        const business = businessFAQ(text, jid);
+        const faq = business?.reply || localFAQ.get(text.toLowerCase());
         let reply = faq;
         if (!reply) {
           if (now - (userLast.get(jid) || 0) < minUserInterval) continue;
