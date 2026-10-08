@@ -42,3 +42,12 @@ If you previously embedded a hard-coded secret in an app script, **rotate that s
 ## Health
 
 `GET /healthz` checks Bansos only. It does not certify that WhatsApp is connected, authenticated, or able to reply through an AI model.
+
+
+## Telegram Nadia (@noranisa_bot)
+
+The optional Telegram worker is already included in `telegram.mjs`. In SnapDeploy add `TELEGRAM_BOT_TOKEN` with a **new, rotated BotFather token** to enable it; never commit or paste token values into public chats. Remove the old leaked token first using BotFather's **/revoke** command for the bot.
+
+Commands: `/start`, `/help`, `/ping`, `/wa`, `/qris`, `/rekening`, `/9router`, `/models`, `/model ID`, `/mode hermes`, `/mode standard`, `/hermes <request>`, `/reset`. Ordinary messages use Nadia business FAQs first, then an automatically selected Bansos AI model. Model listing is cached for 10 minutes. This is a conversational mode, **not an autonomous Hermes execution environment**, and `/9router` only reports configured gateway info until a real gateway is connected.
+
+QRIS uses the GitHub file `qris_bit_bean.png` via `WA_QRIS_IMAGE_URL` (optional override). Payment is never verified automatically. Telegram polling stops when SnapDeploy puts the container to sleep; production bot reliability requires an always-on host. Telegram and WhatsApp conversation history is in-memory, not durable database storage.
