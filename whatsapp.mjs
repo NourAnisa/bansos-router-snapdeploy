@@ -66,6 +66,16 @@ async function start() {
   const { version } = await fetchLatestBaileysVersion();
   socket = makeWASocket({ version, auth: state, logger, printQRInTerminal: false, syncFullHistory: false, markOnlineOnConnect: false });
   socket.ev.on('creds.update', saveCreds);
+  const phone = String(process.env.WA_PHONE_NUMBER || '').replace(/[^0-9]/g, '');
+  if (!state.creds.registered && phone) {
+    setTimeout(async () => {
+      try {
+        const code = await socket.requestPairingCode(phone);
+        console.log('[WA] Pairing code (do not share publicly):', code);
+        console.log('[WA] On WhatsApp: Linked devices > Link with phone number instead.');
+      } catch (err) { console.warn('[WA] Pairing failed:', err.message); }
+    }, 3000);
+  }
   socket.ev.on('connection.update', ({ connection, qr, lastDisconnect }) => {
     if (qr) console.log('[WA] QR pairing baru tersedia. Untuk keamanan, tidak ditampilkan melalui endpoint publik. Gunakan alur pairing lokal atau panel privat.');
     if (connection === 'open') { reconnectCount = 0; console.log('[WA] WhatsApp connected'); }
