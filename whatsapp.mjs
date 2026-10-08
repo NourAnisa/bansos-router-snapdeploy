@@ -9,7 +9,29 @@ const authDir = process.env.WA_AUTH_DIR || '/home/node/.wa_auth';
 const baseURL = process.env.WA_AI_BASE_URL || 'http://127.0.0.1:17070/v1';
 const apiURL = baseURL.endsWith('/') ? baseURL.slice(0, -1) : baseURL;
 const apiKey = process.env.WA_AI_API_KEY || '';
-const model = process.env.WA_MODEL || '';
+const configuredModel = (process.env.WA_MODEL || 'auto').trim();
+let modelCache = { ids: [], expires: 0 };
+async function chooseModels() {
+  if (configuredModel && configuredModel.toLowerCase() !== 'auto' && !configuredModel.startsWith('ID model')) return [configuredModel];
+  if (Date.now() < modelCache.expires) return modelCache.ids;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 7000);
+    let response;
+    try { response = await fetch(apiURL + '/models', { headers: apiKey ? { Authorization: 'Bearer ' + apiKey } : {}, signal: controller.signal }); }
+    finally { clearTimeout(timeout); }
+    if (!response.ok) throw new Error('Models HTTP ' + response.status);
+    const data = await response.json();
+    const ids = [...new Set((Array.isArray(data.data) ? data.data : []).map(m => m?.id).filter(id => typeof id === 'string' && id.length < 200))];
+    modelCache = { ids, expires: Date.now() + (ids.length ? 10 * 60_000 : 60_000) };
+    console.log('[WA] Auto model catalog:', ids.length, 'model IDs cached');
+    return ids;
+  } catch (error) {
+    console.warn('[WA] Auto model lookup unavailable:', error.message);
+    modelCache.expires = Date.now() + 60_000;
+    return modelCache.ids;
+  }
+}
 const localFAQ = new Map([
   ['halo', 'Halo! Ada yang bisa saya bantu?'],
   ['hai', 'Halo! Ada yang bisa saya bantu?'],
@@ -31,17 +53,19 @@ function cleanup(now) {
   for (const [id, when] of userLast) if (now - when > 60 * 60_000) userLast.delete(id);
 }
 async function answerAI(text) {
-  if (!model) return 'Terima kasih! Pesan diterima. Admin akan segera membantu.';
-  for (let attempt = 0; attempt < 2; attempt++) {
-    let response;
+  const models = await chooseModels();
+  if (!models.length) return 'Terima kasih. Saat ini layanan AI belum tersedia. Mohon tunggu admin.';
+  for (let attempt = 0; attempt < Math.min(models.length, 2); attempt++) {
+    const selectedModel = models[attempt];
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 22000);
+      let response;
       try {
         response = await fetch(apiURL + '/chat/completions', {
           method: 'POST',
           headers: { 'content-type': 'application/json', ...(apiKey ? { Authorization: 'Bearer ' + apiKey } : {}) },
-          body: JSON.stringify({ model, stream: false, max_tokens: 250, messages: [
+          body: JSON.stringify({ model: selectedModel, stream: false, max_tokens: 250, messages: [
             { role: 'system', content: process.env.WA_SYSTEM_PROMPT || systemPrompt },
             { role: 'user', content: text }
           ] }),
@@ -50,16 +74,15 @@ async function answerAI(text) {
       } finally { clearTimeout(timer); }
       if (response.ok) {
         const data = await response.json();
-        return String(data.choices?.[0]?.message?.content || '').trim().slice(0, 3500) || 'Terima kasih, pesanmu kami terima.';
+        const answer = String(data.choices?.[0]?.message?.content || '').trim().slice(0, 3500);
+        if (answer) return answer;
       }
-      if (response.status === 429 && attempt === 0) {
-        const raw = Number(response.headers.get('retry-after'));
-        await delay(Number.isFinite(raw) && raw > 0 ? Math.min(raw * 1000, 15000) : 5000);
-        continue;
+      if (response.status === 429) {
+        console.warn('[WA] Rate-limited by AI endpoint. No immediate retry.');
+        break;
       }
-      console.warn('[WA] AI HTTP status', response.status);
-    } catch (err) { console.warn('[WA] AI unavailable:', err.message); }
-    break;
+      console.warn('[WA] Model failed:', selectedModel, 'HTTP', response.status);
+    } catch (err) { console.warn('[WA] AI unavailable:', err.message); break; }
   }
   return 'Terima kasih. Saat ini asisten AI sedang sibuk. Silakan coba lagi nanti atau tunggu admin.';
 }
