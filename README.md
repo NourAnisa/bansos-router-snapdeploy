@@ -14,7 +14,7 @@ The WhatsApp bridge is **opt-in** and uses Baileys (unofficial WhatsApp Web prot
 |---|---|---|
 | `WA_ENABLED` | `true` | Start WhatsApp connection |
 | `WA_PHONE_NUMBER` | `628xxxxxxxxxx` | WhatsApp number with country code, digits only |
-| `WA_MODEL` | Your working model ID | **Required for AI replies**; otherwise safe fixed response |
+| `WA_MODEL` | `auto` | Automatically discovers `/v1/models` and caches for 10 minutes; optional explicit model ID |
 | `WA_AI_BASE_URL` | `http://127.0.0.1:17070/v1` | Local Bansos API |
 | `WA_AI_API_KEY` | (secret if required) | Never commit credentials |
 | `WA_USER_COOLDOWN_MS` | `15000` | Per-sender AI cooldown |
