@@ -4,7 +4,7 @@ RUN npm install -g --no-audit --no-fund bansos-router@0.3.1
 WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
-COPY whatsapp.mjs nadia-business.mjs nadia-session.mjs ./
+COPY whatsapp.mjs nadia-business.mjs nadia-session.mjs telegram.mjs ./
 COPY start.sh ./
 RUN chmod +x /app/start.sh && mkdir -p /home/node/.bansos /home/node/.wa_auth && chown -R node:node /home/node /app
 ENV NODE_ENV=production
